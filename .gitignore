@@ -1,0 +1,7 @@
+__pycache__/
+.venv/
+storage/linkedin_state.json
+.env
+data/raw/*.png
+data/raw/*.html
+.pytest_cache/

@@ -51,7 +51,7 @@ async def _update_render_session_env(session_b64: str) -> bool:
 
     try:
         async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.patch(url, headers=headers, json=payload)
+            response = await client.put(url, headers=headers, json=payload)
             response.raise_for_status()
         logger.info("Render environment updated successfully for LINKEDIN_SESSION_B64")
         return True

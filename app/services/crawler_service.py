@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import json
+import os
 from datetime import datetime
 from typing import Any
 
@@ -9,7 +12,7 @@ from playwright.sync_api import Error, Page, sync_playwright
 
 from app.config import settings
 from app.services.parser_service import parse_post_locator
-from app.utils.file_utils import ensure_directory, save_text_file
+from app.utils.file_utils import ensure_directory, save_json_file, save_text_file
 from app.utils.logger import get_logger
 
 
@@ -21,6 +24,41 @@ POST_SELECTORS = [
     "div.feed-shared-update-v2",
     "div.occludable-update",
 ]
+
+
+def _is_login_url(url: str) -> bool:
+    """Return True when LinkedIn navigation lands on an auth page."""
+
+    normalized = (url or "").lower()
+    return any(part in normalized for part in ["/login", "/checkpoint", "/authwall"])
+
+
+def _restore_state_from_env_if_needed() -> bool:
+    """Restore Playwright storage_state from LINKEDIN_SESSION_B64 when file is missing."""
+
+    if settings.state_path.exists():
+        return True
+
+    session_b64 = os.getenv("LINKEDIN_SESSION_B64", "").strip()
+    if not session_b64:
+        return False
+
+    try:
+        decoded = base64.b64decode(session_b64)
+        payload = json.loads(decoded.decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("Decoded session must be a JSON object")
+        if not isinstance(payload.get("cookies"), list):
+            raise ValueError('Decoded session missing valid "cookies" list')
+        if not isinstance(payload.get("origins"), list):
+            raise ValueError('Decoded session missing valid "origins" list')
+
+        save_json_file(settings.state_path, payload)
+        logger.info("Restored LinkedIn state file from LINKEDIN_SESSION_B64 at crawl time")
+        return True
+    except Exception:
+        logger.exception("Failed to restore LINKEDIN_SESSION_B64 at crawl time")
+        return False
 
 
 def _take_error_screenshot(page: Page, filename: str = "error.png") -> str:
@@ -51,9 +89,9 @@ def open_group_and_collect_posts(
 ) -> dict[str, Any]:
     """Open a LinkedIn group page, scroll, and parse post data."""
 
-    if not settings.state_path.exists():
+    if not _restore_state_from_env_if_needed():
         raise FileNotFoundError(
-            f"LinkedIn state file not found at {settings.state_path}. Call POST /login first."
+            f"LinkedIn state file not found at {settings.state_path}. Provide LINKEDIN_SESSION_B64 or call POST /upload-session."
         )
 
     crawl_time = datetime.now()
@@ -67,7 +105,19 @@ def open_group_and_collect_posts(
 
         try:
             logger.info("Opening group URL: %s", group_url)
-            page.goto(group_url, wait_until="networkidle", timeout=90000)
+            page.goto(group_url, wait_until="domcontentloaded", timeout=90000)
+
+            if _is_login_url(page.url):
+                logger.warning("Session redirected to login/checkpoint. Retrying group navigation once.")
+                page.goto("https://www.linkedin.com/feed/", wait_until="domcontentloaded", timeout=90000)
+                page.goto(group_url, wait_until="domcontentloaded", timeout=90000)
+
+            if _is_login_url(page.url):
+                raise RuntimeError(
+                    "LinkedIn session is invalid or expired (redirected to login/checkpoint). "
+                    "Upload a fresh session via POST /upload-session or relogin via POST /login."
+                )
+
             page.wait_for_timeout(4000)
 
             for scroll_index in range(settings.default_scroll_times):

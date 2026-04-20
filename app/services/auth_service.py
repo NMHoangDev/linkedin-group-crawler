@@ -42,6 +42,7 @@ def login_and_save_session(force_relogin: bool = False) -> Path:
         try:
             logger.info("Opening LinkedIn login page")
             page.goto("https://www.linkedin.com/login", wait_until="domcontentloaded", timeout=60000)
+            page.screenshot(path="/tmp/linkedin_debug.png") 
             page.fill('input[name="session_key"]', settings.linkedin_email)
             page.fill('input[name="session_password"]', settings.linkedin_password)
             page.click('button[type="submit"]')

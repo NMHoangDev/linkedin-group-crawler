@@ -19,6 +19,7 @@ class LoginResponse(BaseResponse):
     """Login response payload."""
 
     state_path: Optional[str] = None
+    session_b64: Optional[str] = None
 
 
 class TopPostResponse(BaseModel):

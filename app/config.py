@@ -31,6 +31,8 @@ class Settings:
     default_scroll_delay_ms: int = int(os.getenv("DEFAULT_SCROLL_DELAY_MS", "2000"))
     default_max_items: int = int(os.getenv("DEFAULT_MAX_ITEMS", "50"))
     api_key: str = os.getenv("API_KEY", "")
+    render_api_key: str = os.getenv("RENDER_API_KEY", "")
+    render_service_id: str = os.getenv("RENDER_SERVICE_ID", "")
     host: str = os.getenv("HOST", "0.0.0.0")
     port: int = int(os.getenv("PORT", "8000"))
     raw_data_dir: Path = BASE_DIR / "data" / "raw"
